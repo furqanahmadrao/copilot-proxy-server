@@ -29,7 +29,9 @@
     "node": ">=18.0.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown",
@@ -38,6 +40,7 @@
     "lint": "eslint --cache",
     "lint:all": "eslint --cache .",
     "prepack": "npm run build",
+    "prepare": "simple-git-hooks",
     "start": "NODE_ENV=production node ./dist/main.js",
     "typecheck": "tsc"
   },

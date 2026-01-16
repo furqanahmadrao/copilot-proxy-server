@@ -21,7 +21,6 @@ GitHub Copilot provides powerful AI capabilities but lacks direct API compatibil
 
 - Node.js >= 18.0.0
 - Active GitHub Copilot subscription (individual, business, or enterprise)
-- Supported OS: Windows, macOS, Linux
 
 ## Installation
 
