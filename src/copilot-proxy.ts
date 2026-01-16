@@ -5,7 +5,7 @@ import { spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
 
-import { readPid, removePid } from "./daemon/pid"
+import { readPid, removePid, isProcessAlive } from "./daemon/pid"
 import { ensurePaths, PATHS } from "./lib/paths"
 import { setupGitHubToken } from "./lib/token"
 import { getCopilotToken } from "./services/github/get-copilot-token"
@@ -19,7 +19,7 @@ async function getTokenState(): Promise<
   "valid" | "expiring" | "expired" | "missing"
 > {
   try {
-    const tokenContent = await fs.readFile(PATHS.GITHUB_TOKEN_PATH, "utf8")
+    const tokenContent = await fs.readFile(PATHS.TOKEN_PATH, "utf8")
     if (!tokenContent.trim()) {
       return "missing"
     }
@@ -55,10 +55,9 @@ async function statusCommand(): Promise<void> {
     return
   }
 
-  // Validate process exists
-  try {
-    process.kill(pid, 0)
-  } catch {
+  // Validate the process actually exists
+  const alive = await isProcessAlive(pid)
+  if (!alive) {
     consola.warn(`Stale PID file found (process ${pid} does not exist)`)
     await removePid()
     consola.info("Copilot Proxy Server is not running")
@@ -127,10 +126,9 @@ async function stopCommand(): Promise<void> {
     return
   }
 
-  // Validate process exists
-  try {
-    process.kill(pid, 0)
-  } catch {
+  // Validate the process actually exists
+  const alive = await isProcessAlive(pid)
+  if (!alive) {
     consola.warn(`Stale PID file found (process ${pid} does not exist)`)
     await removePid()
     consola.info("Copilot Proxy Server was not running")
@@ -149,14 +147,14 @@ async function stopCommand(): Promise<void> {
   // Wait for process to exit for up to 10s
   const start = Date.now()
   while (Date.now() - start < 10000) {
-    try {
-      process.kill(pid, 0)
-      // still alive
-      await new Promise((r) => setTimeout(r, 200))
-    } catch {
+    const stillAlive = await isProcessAlive(pid)
+    if (!stillAlive) {
       consola.success("Copilot Proxy Server stopped")
+      // Ensure PID file is removed even if hooks failed
+      await removePid()
       return
     }
+    await new Promise((r) => setTimeout(r, 200))
   }
 
   consola.warn("Server did not exit within timeout; forcing termination")
@@ -173,6 +171,7 @@ async function stopCommand(): Promise<void> {
       }
     }
     consola.info("Copilot Proxy Server forcefully terminated")
+    await removePid()
   } catch (err) {
     consola.error("Failed to force kill server:", err)
   }
@@ -183,14 +182,14 @@ async function startCommand(): Promise<void> {
   // Check if already running
   const pid = await readPid()
   if (pid) {
-    try {
-      process.kill(pid, 0)
-      // Process exists
+    // Verify the process is actually alive
+    const alive = await isProcessAlive(pid)
+    if (alive) {
       consola.info(`Copilot Proxy Server is already running on http://localhost:${PORT}`)
       consola.info(`  PID: ${pid}`)
       return
-    } catch {
-      // Stale PID file
+    } else {
+      // Stale PID file, clean it up
       consola.warn(`Removing stale PID file (process ${pid} does not exist)`)
       await removePid()
     }
@@ -255,19 +254,13 @@ async function startCommand(): Promise<void> {
 
   // Verify server is running
   const newPid = await readPid()
-  if (newPid) {
-    try {
-      process.kill(newPid, 0)
-      consola.success("Copilot Proxy Server started successfully")
-      consola.info(`  PID:  ${newPid}`)
-      consola.info(`  Port: ${PORT}`)
-      consola.info(`  URL:  http://localhost:${PORT}`)
-    } catch {
-      consola.error("Server process terminated unexpectedly")
-      process.exit(1)
-    }
+  if (newPid && await isProcessAlive(newPid)) {
+    consola.success("Copilot Proxy Server started successfully")
+    consola.info(`  PID:  ${newPid}`)
+    consola.info(`  Port: ${PORT}`)
+    consola.info(`  URL:  http://localhost:${PORT}`)
   } else {
-    consola.error("Server failed to start (no PID file created)")
+    consola.error("Server failed to start (no PID file created or process not alive)")
     process.exit(1)
   }
 }

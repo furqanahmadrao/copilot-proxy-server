@@ -2,18 +2,20 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-const APP_DIR = path.join(os.homedir(), ".local", "share", "copilot-api")
+const APP_DIR = path.join(os.homedir(), ".local", "share", "copilot-proxy-server")
 
-const GITHUB_TOKEN_PATH = path.join(APP_DIR, "github_token")
+const TOKEN_PATH = path.join(APP_DIR, "token.json")
 
 export const PATHS = {
   APP_DIR,
-  GITHUB_TOKEN_PATH,
+  TOKEN_PATH,
+  // Legacy alias for backwards compatibility during migration
+  GITHUB_TOKEN_PATH: TOKEN_PATH,
 }
 
 export async function ensurePaths(): Promise<void> {
   await fs.mkdir(PATHS.APP_DIR, { recursive: true })
-  await ensureFile(PATHS.GITHUB_TOKEN_PATH)
+  await ensureFile(PATHS.TOKEN_PATH)
 }
 
 async function ensureFile(filePath: string): Promise<void> {

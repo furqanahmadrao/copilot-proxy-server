@@ -3,6 +3,8 @@ import { serve, type ServerHandler } from "srvx"
 
 import { server, setReadiness, getActiveRequests } from "~/server"
 
+import { writePid, removePid } from "./pid"
+
 import { LifecycleState, DaemonOptions } from "./types"
 
 // Minimal, surgical DaemonController implementing lifecycle owner responsibilities.
@@ -20,6 +22,8 @@ export class DaemonController {
   private startFn?: (opts: DaemonOptions) => Promise<void>
   // When false, do not call process.exit() after shutdown (useful for tests)
   private exitOnShutdown = true
+  // Track whether we wrote a PID file so we can clean it reliably
+  private pidWritten = false
 
   constructor(
     private opts: DaemonOptions,
@@ -61,6 +65,13 @@ export class DaemonController {
       consola.error("Unhandled rejection, initiating shutdown:", reason)
       void this.beginShutdown("fatal")
     })
+
+    // Ensure PID cleanup on normal exit paths (best-effort for crashes)
+    process.on("exit", () => {
+      if (this.pidWritten) {
+        void removePid()
+      }
+    })
   }
 
   // Register a cleanup hook to be called during shutdown
@@ -101,16 +112,13 @@ export class DaemonController {
       setReadiness(true)
       consola.info(`Daemon ready and listening on port ${this.opts.port}`)
 
-      // If we're running as a detached child (launcher sets _COPILOT_DAEMON_CHILD=1),
-      // create a PID file so the launcher or `copilot-api stop` can control the daemon.
-      // We avoid writing a PID file when running in foreground or tests.
+      // If running as detached child, write PID only after successful listen
       try {
         if (process.env._COPILOT_DAEMON_CHILD === "1") {
-          const { writePid } = await import("./pid")
           await writePid(process.pid)
+          this.pidWritten = true
           // Register a cleanup hook to remove PID on shutdown
           this.registerHook(async () => {
-            const { removePid } = await import("./pid")
             await removePid()
           })
         }

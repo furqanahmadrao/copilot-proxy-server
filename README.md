@@ -49,7 +49,7 @@ This command:
 4. Exchanges the code for a GitHub access token
 5. Stores the token locally for future use
 
-The token is saved to `~/.local/share/copilot-api/github_token` and persists across server restarts.
+The token is saved to `~/.local/share/copilot-proxy-server/token.json` and persists across server restarts.
 
 ### Token Validation
 
@@ -67,8 +67,8 @@ The server:
 - Validates your authentication
 - Starts on port 5678 by default
 - Runs in the background with automatic restarts
-- Logs to `~/.local/share/copilot-api/server.log`
-- Stores process ID in `~/.local/share/copilot-api/copilot-api.pid`
+- Logs to `~/.local/share/copilot-proxy-server/server.log`
+- Stores process ID in `~/.local/share/copilot-proxy-server/copilot-proxy-server.pid`
 
 ### Check Server Status
 
@@ -123,12 +123,12 @@ copilot-proxy auth
 
 ### File Locations
 
-All configuration and runtime files are stored in `~/.local/share/copilot-api/`:
+All configuration and runtime files are stored in `~/.local/share/copilot-proxy-server/`:
 
 | File | Purpose |
 |------|---------|
-| `github_token` | Encrypted GitHub access token |
-| `copilot-api.pid` | Server process ID (when running) |
+| `token.json` | Encrypted GitHub access token |
+| `copilot-proxy-server.pid` | Server process ID (when running) |
 | `server.log` | Server output and error logs |
 
 ### Token Management
@@ -242,7 +242,7 @@ curl http://localhost:5678/v1/messages \
 
 - Run `copilot-proxy status` to check token state
 - Re-authenticate with `copilot-proxy auth` if expired
-- Check logs at `~/.local/share/copilot-api/server.log`
+- Check logs at `~/.local/share/copilot-proxy-server/server.log`
 
 ### Port already in use
 

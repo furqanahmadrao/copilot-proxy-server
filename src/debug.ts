@@ -17,7 +17,7 @@ interface DebugInfo {
   }
   paths: {
     APP_DIR: string
-    GITHUB_TOKEN_PATH: string
+    TOKEN_PATH: string
   }
   tokenExists: boolean
 }
@@ -53,10 +53,10 @@ function getRuntimeInfo() {
 
 async function checkTokenExists(): Promise<boolean> {
   try {
-    const stats = await fs.stat(PATHS.GITHUB_TOKEN_PATH)
+    const stats = await fs.stat(PATHS.TOKEN_PATH)
     if (!stats.isFile()) return false
 
-    const content = await fs.readFile(PATHS.GITHUB_TOKEN_PATH, "utf8")
+    const content = await fs.readFile(PATHS.TOKEN_PATH, "utf8")
     return content.trim().length > 0
   } catch {
     return false
@@ -74,21 +74,21 @@ async function getDebugInfo(): Promise<DebugInfo> {
     runtime: getRuntimeInfo(),
     paths: {
       APP_DIR: PATHS.APP_DIR,
-      GITHUB_TOKEN_PATH: PATHS.GITHUB_TOKEN_PATH,
+      TOKEN_PATH: PATHS.TOKEN_PATH,
     },
     tokenExists,
   }
 }
 
 function printDebugInfoPlain(info: DebugInfo): void {
-  consola.info(`copilot-api debug
+  consola.info(`copilot-proxy-server debug
 
 Version: ${info.version}
 Runtime: ${info.runtime.name} ${info.runtime.version} (${info.runtime.platform} ${info.runtime.arch})
 
 Paths:
 - APP_DIR: ${info.paths.APP_DIR}
-- GITHUB_TOKEN_PATH: ${info.paths.GITHUB_TOKEN_PATH}
+- TOKEN_PATH: ${info.paths.TOKEN_PATH}
 
 Token exists: ${info.tokenExists ? "Yes" : "No"}`)
 }
