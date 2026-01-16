@@ -65,10 +65,10 @@ copilot-proxy start
 
 The server:
 - Validates your authentication
-- Starts on port 5678 by default
-- Runs in the background with automatic restarts
+- Starts on port 5678 (configurable)
+- Runs in the background as a detached process
 - Logs to `~/.local/share/copilot-proxy-server/server.log`
-- Stores process ID in `~/.local/share/copilot-proxy-server/copilot-proxy-server.pid`
+- Uses port-based detection (no PID files)
 
 ### Check Server Status
 
@@ -78,8 +78,7 @@ copilot-proxy status
 
 Displays:
 - Running state (active/stopped)
-- Process ID
-- Port number
+- Port number (default: 5678)
 - Local URL
 - Token status (valid/expiring/expired/missing)
 
@@ -123,13 +122,27 @@ copilot-proxy auth
 
 ### File Locations
 
-All configuration and runtime files are stored in `~/.local/share/copilot-proxy-server/`:
+All configuration and runtime files are stored in:
+- **Linux/macOS**: `~/.local/share/copilot-proxy-server/`
+- **Windows**: `%USERPROFILE%\.local\share\copilot-proxy-server\`
 
 | File | Purpose |
 |------|---------|
 | `token.json` | Encrypted GitHub access token |
-| `copilot-proxy-server.pid` | Server process ID (when running) |
 | `server.log` | Server output and error logs |
+
+### Server Lifecycle Management
+
+The server uses **port-based detection** for lifecycle management:
+- **Start**: Checks if port 5678 is available, spawns background process, polls until server binds
+- **Status**: Tests TCP connection to port 5678 to determine if server is running
+- **Stop**: Sends HTTP shutdown request to `/admin/shutdown`, polls until port releases
+
+This stateless approach:
+- Eliminates PID file race conditions
+- Works reliably across platforms (Windows, macOS, Linux)
+- Supports crash recovery (port automatically released by OS)
+- No filesystem state to clean up or corrupt
 
 ### Token Management
 
@@ -140,6 +153,30 @@ Tokens are:
 - Displayed with clear state (valid, expiring in <5 minutes, expired, or missing)
 
 If authentication expires, simply run `copilot-proxy auth` to re-authenticate.
+
+### Changing the Port
+
+The default port is **5678**. To use a different port, modify the `PORT` constant in the source code:
+
+1. Edit `src/lib/paths.ts`:
+   ```typescript
+   export const PORT = 5678 // Change to your desired port
+   ```
+
+2. Rebuild the project:
+   ```bash
+   npm run build
+   # or
+   bun run build
+   ```
+
+3. Restart the server:
+   ```bash
+   copilot-proxy stop
+   copilot-proxy start
+   ```
+
+**Note**: After changing the port, update your client configurations (e.g., Claude Code settings) to use the new URL.
 
 ## Using with Claude Code
 
@@ -209,6 +246,7 @@ The server exposes standard OpenAI and Anthropic-compatible endpoints:
 |----------|--------|-------------|
 | `/usage` | GET | View Copilot usage statistics |
 | `/token` | GET | Display current access token |
+| `/admin/shutdown` | POST | Gracefully shutdown server (localhost only) |
 
 ## Examples
 
@@ -246,13 +284,61 @@ curl http://localhost:5678/v1/messages \
 
 ### Port already in use
 
-The default port (5678) may be occupied. Stop other services using this port or wait for the previous server instance to fully terminate.
+The default port (5678) may be occupied by another process. 
+
+**Solutions**:
+- Stop the conflicting process
+- Use `copilot-proxy stop` if a previous instance is still running
+- Change the port (see "Changing the Port" section above)
+- Wait a few seconds for the OS to release the port after a crash
+
+The server automatically detects port conflicts and refuses to start if the port is already bound.
 
 ### Authentication fails
 
 - Ensure you have an active GitHub Copilot subscription
 - Check your internet connection
 - Complete the device code flow within the time limit (typically 15 minutes)
+
+### Server crashes or stops unexpectedly
+
+The port-based lifecycle automatically handles crashes:
+- If the server crashes, the OS immediately releases port 5678
+- Simply run `copilot-proxy start` to restart
+- No manual cleanup of PID files or stale locks needed
+- Check `~/.local/share/copilot-proxy-server/server.log` for error details
+
+## Technical Architecture
+
+### Port-Based Lifecycle
+
+The server uses a **stateless, port-based lifecycle** instead of traditional PID files:
+
+**Advantages**:
+- ✅ No race conditions from stale PID files
+- ✅ Works reliably on Windows, macOS, and Linux
+- ✅ Automatic crash recovery (OS releases port immediately)
+- ✅ Simple, predictable behavior
+- ✅ No filesystem state to corrupt or clean up
+
+**How it works**:
+1. **Start**: Check if port 5678 is available → spawn detached process → poll until port binds
+2. **Status**: Attempt TCP connection to port 5678 → report running if connectable
+3. **Stop**: Send HTTP POST to `/admin/shutdown` → poll until port releases
+
+### Request Translation
+
+The proxy translates between GitHub Copilot's API and standard LLM formats:
+
+- **OpenAI → Copilot**: Chat completions, embeddings, model listings
+- **Anthropic → OpenAI → Copilot**: Messages API with streaming support
+- **Copilot → OpenAI/Anthropic**: Response format conversion
+
+All translations preserve:
+- Streaming capabilities (SSE format)
+- Tool/function calling
+- Message roles and content
+- Token usage statistics
 
 ## License
 

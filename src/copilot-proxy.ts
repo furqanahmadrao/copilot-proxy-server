@@ -5,14 +5,14 @@ import { spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
 
-import { readPid, removePid, isProcessAlive } from "./daemon/pid"
 import { ensurePaths, PATHS } from "./lib/paths"
+import { isPortInUse, sendShutdownRequest } from "./lib/port-check"
 import { setupGitHubToken } from "./lib/token"
 import { getCopilotToken } from "./services/github/get-copilot-token"
 import { state } from "./lib/state"
 
 const PORT = 5678
-const SERVER_START_TIMEOUT = 8000 // Increased timeout for server initialization
+const SERVER_START_TIMEOUT = 8000 // Timeout for server initialization
 
 // Check token state without forcing auth
 async function getTokenState(): Promise<
@@ -46,20 +46,10 @@ async function getTokenState(): Promise<
 
 // Status command: check if server is running
 async function statusCommand(): Promise<void> {
-  const pid = await readPid()
   const tokenState = await getTokenState()
+  const portInUse = await isPortInUse(PORT)
 
-  if (!pid) {
-    consola.info("Copilot Proxy Server is not running")
-    displayTokenState(tokenState)
-    return
-  }
-
-  // Validate the process actually exists
-  const alive = await isProcessAlive(pid)
-  if (!alive) {
-    consola.warn(`Stale PID file found (process ${pid} does not exist)`)
-    await removePid()
+  if (!portInUse) {
     consola.info("Copilot Proxy Server is not running")
     displayTokenState(tokenState)
     return
@@ -67,7 +57,6 @@ async function statusCommand(): Promise<void> {
 
   // Server is running
   consola.success(`Copilot Proxy Server is running`)
-  consola.info(`  PID:  ${pid}`)
   consola.info(`  Port: ${PORT}`)
   consola.info(`  URL:  http://localhost:${PORT}`)
   displayTokenState(tokenState)
@@ -118,81 +107,51 @@ async function hasValidToken(): Promise<boolean> {
   }
 }
 
-// Stop command: graceful shutdown with fallback
+// Stop command: graceful shutdown via HTTP request
 async function stopCommand(): Promise<void> {
-  const pid = await readPid()
-  if (!pid) {
+  const portInUse = await isPortInUse(PORT)
+  if (!portInUse) {
     consola.info("Copilot Proxy Server is not running")
     return
   }
 
-  // Validate the process actually exists
-  const alive = await isProcessAlive(pid)
-  if (!alive) {
-    consola.warn(`Stale PID file found (process ${pid} does not exist)`)
-    await removePid()
-    consola.info("Copilot Proxy Server was not running")
-    return
-  }
+  consola.info(`Stopping Copilot Proxy Server on port ${PORT}...`)
 
-  consola.info(`Stopping Copilot Proxy Server (PID ${pid})...`)
+  // Send shutdown request to the server
+  const success = await sendShutdownRequest(PORT)
 
-  try {
-    // Try graceful stop
-    process.kill(pid, "SIGTERM")
-  } catch (err) {
-    consola.warn(`Failed to send SIGTERM to ${pid}: ${err}`)
-  }
-
-  // Wait for process to exit for up to 10s
-  const start = Date.now()
-  while (Date.now() - start < 10000) {
-    const stillAlive = await isProcessAlive(pid)
-    if (!stillAlive) {
-      consola.success("Copilot Proxy Server stopped")
-      // Ensure PID file is removed even if hooks failed
-      await removePid()
-      return
-    }
-    await new Promise((r) => setTimeout(r, 200))
-  }
-
-  consola.warn("Server did not exit within timeout; forcing termination")
-  try {
-    if (process.platform === "win32") {
-      // Windows: use taskkill to kill process tree
-      spawn("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" })
-    } else {
-      // POSIX: kill process group
-      try {
-        process.kill(-pid, "SIGKILL")
-      } catch {
-        process.kill(pid, "SIGKILL")
+  if (success) {
+    // Wait longer for server to fully shut down and release port
+    const maxWait = 5000 // 5 seconds
+    const startWait = Date.now()
+    
+    while (Date.now() - startWait < maxWait) {
+      await new Promise((r) => setTimeout(r, 300))
+      const stillRunning = await isPortInUse(PORT)
+      if (!stillRunning) {
+        consola.success("Copilot Proxy Server stopped")
+        return
       }
     }
-    consola.info("Copilot Proxy Server forcefully terminated")
-    await removePid()
-  } catch (err) {
-    consola.error("Failed to force kill server:", err)
+    
+    consola.warn("Server did not release port within timeout")
+    consola.info("You may need to wait a moment before restarting")
+  } else {
+    consola.error("Failed to send shutdown request to server")
+    consola.info(
+      "If the server is running externally, use Ctrl+C or kill the process manually",
+    )
+    process.exit(1)
   }
 }
 
-// Start command: check not running, auth, spawn detached
+// Start command: check port availability, spawn detached server
 async function startCommand(): Promise<void> {
-  // Check if already running
-  const pid = await readPid()
-  if (pid) {
-    // Verify the process is actually alive
-    const alive = await isProcessAlive(pid)
-    if (alive) {
-      consola.info(`Copilot Proxy Server is already running on http://localhost:${PORT}`)
-      consola.info(`  PID: ${pid}`)
-      return
-    } else {
-      // Stale PID file, clean it up
-      consola.warn(`Removing stale PID file (process ${pid} does not exist)`)
-      await removePid()
-    }
+  // Check if port is already in use
+  const portInUse = await isPortInUse(PORT)
+  if (portInUse) {
+    consola.info(`Copilot Proxy Server is already running on http://localhost:${PORT}`)
+    return
   }
 
   // Ensure paths exist
@@ -249,18 +208,26 @@ async function startCommand(): Promise<void> {
   child.unref()
   await logFd.close()
 
-  // Wait briefly to ensure server starts
-  await new Promise((r) => setTimeout(r, SERVER_START_TIMEOUT))
+  // Wait and verify server starts by polling port
+  const maxWait = SERVER_START_TIMEOUT
+  const startTime = Date.now()
+  let serverStarted = false
+  
+  while (Date.now() - startTime < maxWait) {
+    await new Promise((r) => setTimeout(r, 500))
+    if (await isPortInUse(PORT)) {
+      serverStarted = true
+      break
+    }
+  }
 
-  // Verify server is running
-  const newPid = await readPid()
-  if (newPid && await isProcessAlive(newPid)) {
+  if (serverStarted) {
     consola.success("Copilot Proxy Server started successfully")
-    consola.info(`  PID:  ${newPid}`)
     consola.info(`  Port: ${PORT}`)
     consola.info(`  URL:  http://localhost:${PORT}`)
   } else {
-    consola.error("Server failed to start (no PID file created or process not alive)")
+    consola.error("Server failed to start (port is not bound)")
+    consola.info(`Check logs at: ${logPath}`)
     process.exit(1)
   }
 }

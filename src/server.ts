@@ -58,3 +58,22 @@ server.route("/v1/embeddings", embeddingRoutes)
 
 // Anthropic compatible endpoints
 server.route("/v1/messages", messageRoutes)
+
+// Admin endpoint for graceful shutdown
+server.post("/admin/shutdown", async (c) => {
+  // Only allow shutdown from localhost
+  const host = c.req.header("host") || ""
+  if (!host.startsWith("localhost:") && !host.startsWith("127.0.0.1:")) {
+    return c.text("Forbidden", 403)
+  }
+
+  // Mark server as shutting down
+  setReadiness(false)
+
+  // Schedule exit outside the request context to avoid UV handle errors
+  setTimeout(() => {
+    process.exit(0)
+  }, 100)
+
+  return c.json({ message: "Shutting down gracefully" })
+})
