@@ -19,8 +19,9 @@ GitHub Copilot provides powerful AI capabilities but lacks direct API compatibil
 
 ## Prerequisites
 
-- Node.js or Bun runtime
+- Node.js >= 18.0.0
 - Active GitHub Copilot subscription (individual, business, or enterprise)
+- Supported OS: Windows, macOS, Linux
 
 ## Installation
 
@@ -166,8 +167,6 @@ The default port is **5678**. To use a different port, modify the `PORT` constan
 2. Rebuild the project:
    ```bash
    npm run build
-   # or
-   bun run build
    ```
 
 3. Restart the server:

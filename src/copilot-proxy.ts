@@ -12,7 +12,7 @@ import { getCopilotToken } from "./services/github/get-copilot-token"
 import { state } from "./lib/state"
 
 const PORT = 5678
-const SERVER_START_TIMEOUT = 8000 // Timeout for server initialization
+const SERVER_START_TIMEOUT = 12000 // Timeout for server initialization (slower machines)
 
 // Check token state without forcing auth
 async function getTokenState(): Promise<
@@ -77,6 +77,9 @@ function displayTokenState(
       break
     case "missing":
       consola.error("  Token: Missing (run: copilot-proxy auth)")
+      break
+    default:
+      consola.warn("  Token: Unknown state")
       break
   }
 }

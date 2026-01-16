@@ -1,0 +1,42 @@
+# Source files (only dist/ is needed)
+src/
+tests/
+
+# Development configs
+tsconfig.json
+tsdown.config.ts
+eslint.config.js
+.eslintcache
+
+# Build tools
+.github/
+.vscode/
+
+# Development artifacts
+*.log
+test-spawn.log
+*-handoff.md
+AGENTS.md
+
+# Local files
+.local/
+*.local
+
+# Git
+.git/
+.gitignore
+
+# Package manager
+node_modules/
+bun.lock
+
+# Editor
+.aider*
+.cursor/
+
+# CI/CD
+.github/
+Dockerfile*
+docker-compose*
+*.bat
+*.sh

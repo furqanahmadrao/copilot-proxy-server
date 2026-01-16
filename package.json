@@ -5,18 +5,28 @@
   "keywords": [
     "proxy",
     "github-copilot",
-    "openai-compatible"
+    "openai",
+    "anthropic",
+    "claude",
+    "llm",
+    "api",
+    "chatgpt",
+    "ai"
   ],
-  "homepage": "https://github.com/ericc-ch/copilot-proxy-server",
-  "bugs": "https://github.com/ericc-ch/copilot-proxy-server/issues",
+  "homepage": "https://github.com/furqanahmadrao/copilot-proxy-server",
+  "bugs": "https://github.com/furqanahmadrao/copilot-proxy-server/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ericc-ch/copilot-proxy-server.git"
+    "url": "git+https://github.com/furqanahmadrao/copilot-proxy-server.git"
   },
-  "author": "Erick Christian <erickchristian48@gmail.com>",
+  "author": "Furqan Ahmad Rao <furqanahmadrao@gmail.com>",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "copilot-proxy": "./dist/copilot-proxy.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "files": [
     "dist"
@@ -27,10 +37,8 @@
     "knip": "knip-bun",
     "lint": "eslint --cache",
     "lint:all": "eslint --cache .",
-    "prepack": "bun run build",
-    "prepare": "simple-git-hooks",
-    "release": "bumpp && bun publish --access public",
-    "start": "NODE_ENV=production bun run ./src/main.ts",
+    "prepack": "npm run build",
+    "start": "NODE_ENV=production node ./dist/main.js",
     "typecheck": "tsc"
   },
   "simple-git-hooks": {
